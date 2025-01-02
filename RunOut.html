@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Indicador de Runout 360° con Ajustes Finales</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f9f9f9;
+    margin: 20px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.5em;
+  }
+  .medidor {
+    border: 1px solid #ccc;
+    margin: 20px auto;
+    padding: 20px;
+    width: 90%;
+    max-width: 500px;
+    background: #fff;
+    position: relative;
+    box-sizing: border-box;
+  }
+  .medidor h2 {
+    font-size: 1.2em;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .field-group {
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .field-group label {
+    display: block;
+    margin: 5px 0;
+  }
+  .field-group input {
+    width: 80%;
+    max-width: 150px;
+    padding: 5px;
+    text-align: right;
+    box-sizing: border-box;
+  }
+  .dial-container {
+    text-align: center;
+    margin-top: 20px;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    max-width: 300px;
+    user-select: none;
+  }
+  .buttons {
+    text-align: center;
+    margin: 20px;
+  }
+  #add-medidor-btn, #export-button {
+    margin: 10px;
+    padding: 10px 20px;
+    font-size: 1em;
+    cursor: pointer;
+  }
+  .delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #f00;
+    color: #fff;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 0.9em;
+    border-radius: 3px;
+  }
+
+  /* Ajustes para pantallas pequeñas */
+  @media (max-width: 600px) {
+    .medidor {
+      padding: 10px;
+    }
+    .field-group input {
+      width: 100%;
+      max-width: none;
+    }
+    #add-medidor-btn, #export-button {
+      width: 100%;
+      margin: 5px 0;
+    }
+    .delete-btn {
+      top: 5px;
+      right: 5px;
+      padding: 3px 7px;
+      font-size: 0.8em;
+    }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+</head>
+<body>
+<h1>Indicadores de Runout 360°</h1>
+
+<div class="buttons">
+  <button id="add-medidor-btn">Agregar otro medidor</button>
+  <button id="export-button">Exportar a Excel (XLSX)</button>
+</div>
+
+<div id="medidores-container"></div>
+
+<script>
+// Arreglo global de medidores
+let medidores = [];
+
+// Funciones de cálculo
+function angleToValue(angle) {
+  if (angle > 180) angle -= 360;
+  let val = (angle / 180) * 0.015;
+  return val;
+}
+
+function valueToAngle(val) {
+  if (val > 0.015) val = 0.015;
+  if (val < -0.015) val = -0.015;
+  let angle = (val / 0.015) * 180;
+  return angle;
+}
+
+function rotateNeedle(needle, angle) {
+  needle.setAttribute('transform', `rotate(${angle} 100 100)`);
+}
+
+function createMedidor() {
+  const container = document.getElementById('medidores-container');
+
+  const medidorDiv = document.createElement('div');
+  medidorDiv.className = 'medidor';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Medidor';
+
+  // Botón para eliminar este medidor
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'delete-btn';
+  deleteBtn.textContent = 'X';
+  deleteBtn.addEventListener('click', () => {
+    medidores = medidores.filter(m => m.medidorDiv !== medidorDiv);
+    medidorDiv.remove();
+  });
+  medidorDiv.appendChild(deleteBtn);
+
+  const fieldGroup1 = document.createElement('div');
+  fieldGroup1.className = 'field-group';
+  const labelPart = document.createElement('label');
+  labelPart.textContent = 'Parte medida: ';
+  const inputPart = document.createElement('input');
+  inputPart.type = 'text';
+  inputPart.value = 'Sin nombre';
+  labelPart.appendChild(inputPart);
+  fieldGroup1.appendChild(labelPart);
+
+  const fieldGroup2 = document.createElement('div');
+  fieldGroup2.className = 'field-group';
+  const labelMin = document.createElement('label');
+  labelMin.textContent = 'Mínimo (verde): ';
+  const inputMin = document.createElement('input');
+  inputMin.type = 'text';
+  inputMin.value = '0.0000';
+  labelMin.appendChild(inputMin);
+
+  const labelMax = document.createElement('label');
+  labelMax.textContent = 'Máximo (rojo): ';
+  const inputMax = document.createElement('input');
+  inputMax.type = 'text';
+  inputMax.value = '0.0000';
+  labelMax.appendChild(inputMax);
+
+  fieldGroup2.appendChild(labelMin);
+  fieldGroup2.appendChild(labelMax);
+
+  const dialContainer = document.createElement('div');
+  dialContainer.className = 'dial-container';
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', '0 0 200 200');
+  svg.setAttribute('id', 'dial-svg');
+
+  const circle = document.createElementNS(svgNS, 'circle');
+  circle.setAttribute('cx', 100);
+  circle.setAttribute('cy', 100);
+  circle.setAttribute('r', 95);
+  circle.setAttribute('stroke', '#aaa');
+  circle.setAttribute('stroke-width', '4');
+  circle.setAttribute('fill', '#fff');
+  svg.appendChild(circle);
+
+  const marksGroup = document.createElementNS(svgNS, 'g');
+  marksGroup.setAttribute('id', 'marks');
+  svg.appendChild(marksGroup);
+
+  const totalLines = 60;
+  const lineSpacing = 360 / totalLines;
+  for (let i = 0; i < totalLines; i++) {
+    let angle = i * lineSpacing;
+    let length = (i % 10 === 0) ? 10 : 5;
+    let rOuter = 95;
+    let rInner = 95 - length;
+    let rad = (angle - 90) * Math.PI / 180;
+    let xOuter = 100 + rOuter * Math.cos(rad);
+    let yOuter = 100 + rOuter * Math.sin(rad);
+    let xInner = 100 + rInner * Math.cos(rad);
+    let yInner = 100 + rInner * Math.sin(rad);
+
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', xInner);
+    line.setAttribute('y1', yInner);
+    line.setAttribute('x2', xOuter);
+    line.setAttribute('y2', yOuter);
+    line.setAttribute('stroke', '#333');
+    line.setAttribute('stroke-width', '1');
+    marksGroup.appendChild(line);
+
+    if (i % 10 === 0) {
+      let displayAngle = angle;
+      if (displayAngle > 180) displayAngle -= 360;
+      let val = angleToValue(displayAngle);
+      let tx = 100 + (rInner - 15) * Math.cos(rad);
+      let ty = 100 + (rInner - 15) * Math.sin(rad);
+      const text = document.createElementNS(svgNS, 'text');
+      text.setAttribute('x', tx);
+      text.setAttribute('y', ty);
+      text.setAttribute('font-size', '10');
+      text.setAttribute('fill', '#333');
+      text.setAttribute('text-anchor', 'middle');
+      text.textContent = val.toFixed(4) + '"';
+      marksGroup.appendChild(text);
+    }
+  }
+
+  const needleMin = document.createElementNS(svgNS, 'polygon');
+  needleMin.setAttribute('points', '100,20 97,100 103,100');
+  needleMin.setAttribute('fill', 'green');
+  svg.appendChild(needleMin);
+
+  const needleMax = document.createElementNS(svgNS, 'polygon');
+  needleMax.setAttribute('points', '100,20 97,100 103,100');
+  needleMax.setAttribute('fill', 'red');
+  svg.appendChild(needleMax);
+
+  const centerDot = document.createElementNS(svgNS, 'circle');
+  centerDot.setAttribute('cx', 100);
+  centerDot.setAttribute('cy', 100);
+  centerDot.setAttribute('r', 5);
+  centerDot.setAttribute('fill', '#444');
+  svg.appendChild(centerDot);
+
+  dialContainer.appendChild(svg);
+
+  medidorDiv.appendChild(title);
+  medidorDiv.appendChild(fieldGroup1);
+  medidorDiv.appendChild(fieldGroup2);
+  medidorDiv.appendChild(dialContainer);
+
+  container.appendChild(medidorDiv);
+
+  rotateNeedle(needleMin, 0);
+  rotateNeedle(needleMax, 0);
+  inputMin.value = angleToValue(0).toFixed(4);
+  inputMax.value = angleToValue(0).toFixed(4);
+
+  // Manejo de arrastre independiente
+  let dragging = false;
+  let currentNeedle = null;
+  let currentCenterX = 0;
+  let currentCenterY = 0;
+
+  // Función para actualizar el centro
+  function updateCenter() {
+    const rect = svg.getBoundingClientRect();
+    currentCenterX = rect.left + rect.width / 2;
+    currentCenterY = rect.top + rect.height / 2;
+  }
+
+  // Actualizar el centro al cargar y al cambiar el tamaño
+  updateCenter();
+  window.addEventListener('resize', updateCenter);
+
+  // Eventos para mouse
+  svg.addEventListener('mousedown', (e) => {
+    if (e.target === needleMin || e.target === needleMax) {
+      dragging = true;
+      currentNeedle = e.target;
+      updateCenter();
+      e.preventDefault();
+    }
+  });
+
+  // Eventos para touch
+  svg.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (target === needleMin || target === needleMax) {
+      dragging = true;
+      currentNeedle = target;
+      updateCenter();
+      e.preventDefault();
+    }
+  }, {passive: false});
+
+  // Evento para mousemove
+  function handleMove(e) {
+    if (!dragging || !currentNeedle) return;
+
+    let clientX, clientY;
+
+    if (e.type.startsWith('mouse')) {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    } else if (e.type.startsWith('touch')) {
+      const touch = e.touches[0];
+      clientX = touch.clientX;
+      clientY = touch.clientY;
+    }
+
+    const dx = clientX - currentCenterX;
+    const dy = clientY - currentCenterY;
+    let rad = Math.atan2(dy, dx);
+    let deg = rad * 180 / Math.PI;
+    let angle = deg + 90;
+    if (angle > 180) angle -= 360;
+    rotateNeedle(currentNeedle, angle);
+    let val = angleToValue(angle).toFixed(4);
+    if (currentNeedle === needleMin) {
+      inputMin.value = val;
+    } else {
+      inputMax.value = val;
+    }
+  }
+
+  // Eventos para mousemove y touchmove
+  document.addEventListener('mousemove', handleMove);
+  document.addEventListener('touchmove', handleMove, {passive: false});
+
+  // Eventos para mouseup y touchend
+  document.addEventListener('mouseup', () => {
+    dragging = false;
+    currentNeedle = null;
+  });
+  document.addEventListener('touchend', () => {
+    dragging = false;
+    currentNeedle = null;
+  });
+
+  inputMin.addEventListener('change', () => {
+    let val = parseFloat(inputMin.value);
+    if (isNaN(val)) return;
+    let angle = valueToAngle(val);
+    rotateNeedle(needleMin, angle);
+  });
+
+  inputMax.addEventListener('change', () => {
+    let val = parseFloat(inputMax.value);
+    if (isNaN(val)) return;
+    let angle = valueToAngle(val);
+    rotateNeedle(needleMax, angle);
+  });
+
+  function getData() {
+    return {
+      partName: inputPart.value,
+      minVal: inputMin.value,
+      maxVal: inputMax.value,
+      svgElement: svg
+    };
+  }
+
+  return {getData, medidorDiv};
+}
+
+// Evento para agregar medidor
+document.getElementById('add-medidor-btn').addEventListener('click', () => {
+  medidores.push(createMedidor());
+});
+
+// Crear el primer medidor por defecto
+medidores.push(createMedidor());
+
+async function svgToPngDataUrl(svgElement) {
+  return new Promise((resolve) => {
+    let serializer = new XMLSerializer();
+    let svgString = serializer.serializeToString(svgElement);
+    let img = new Image();
+    let svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+    let url = URL.createObjectURL(svgBlob);
+    img.onload = function() {
+      let canvas = document.createElement('canvas');
+      // Mantener 200x200 para no perder calidad
+      canvas.width = 200; 
+      canvas.height = 200;
+      let ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      let png = canvas.toDataURL('image/png');
+      resolve(png);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+}
+
+document.getElementById('export-button').addEventListener('click', async () => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Datos Runout');
+
+  // Columnas incluyendo Medidor
+  worksheet.columns = [
+    { header: 'Parte', key: 'parte', width: 25 },
+    { header: 'Mínimo', key: 'minimo', width: 10 },
+    { header: 'Máximo', key: 'maximo', width: 10 },
+    { header: 'Medidor', key: 'medidor', width: 50 } // más ancho
+  ];
+
+  for (let m of medidores) {
+    let data = m.getData();
+    let pngDataUrl = await svgToPngDataUrl(data.svgElement);
+
+    // Agregamos la fila de datos
+    worksheet.addRow({
+      parte: data.partName,
+      minimo: data.minVal,
+      maximo: data.maxVal,
+      medidor: ''
+    });
+
+    let lastRowNumber = worksheet.lastRow.number;
+    // Hacemos la fila muy alta para que la imagen quepa
+    worksheet.getRow(lastRowNumber).height = 150; 
+
+    // Centramos el texto
+    for (let j = 1; j <=4; j++) {
+      let cell = worksheet.getCell(lastRowNumber, j);
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    }
+
+    let base64 = pngDataUrl.split(',')[1];
+    const imageId = workbook.addImage({
+      base64: base64,
+      extension: 'png'
+    });
+
+    // Colocamos la imagen en la celda D (col=3 0-based, row=lastRowNumber-1 0-based)
+    // Usamos ext: { width:200, height:200 } para mantener la calidad
+    worksheet.addImage(imageId, {
+      tl: { col: 3, row: lastRowNumber-1 },
+      ext: { width: 200, height: 200 }
+    });
+  }
+
+  // Bordes
+  for (let i = 1; i <= worksheet.lastRow.number; i++) {
+    for (let j = 1; j <= 4; j++) {
+      let cell = worksheet.getCell(i, j);
+      cell.border = {
+        top: {style:'thin'},
+        left: {style:'thin'},
+        bottom: {style:'thin'},
+        right: {style:'thin'}
+      };
+    }
+  }
+
+  // Encabezados en negritas
+  worksheet.getRow(1).font = { bold: true };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'datos_runout.xlsx';
+  a.click();
+
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
