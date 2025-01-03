@@ -23,6 +23,8 @@
     background: #fff;
     position: relative;
     box-sizing: border-box;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   }
   .indicator h2 {
     font-size: 1.2em;
@@ -36,6 +38,7 @@
   .field-group label {
     display: block;
     margin: 5px 0;
+    font-weight: bold;
   }
   .field-group input, .field-group select {
     width: 80%;
@@ -43,6 +46,8 @@
     padding: 5px;
     text-align: right;
     box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
   }
   .dial-container {
     text-align: center;
@@ -63,22 +68,40 @@
     padding: 10px 20px;
     font-size: 1em;
     cursor: pointer;
+    border: none;
+    background-color: #007BFF;
+    color: #fff;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+  }
+  #add-indicator-btn:hover, #export-button:hover {
+    background-color: #0056b3;
   }
   .delete-btn, .settings-btn {
     position: absolute;
     top: 10px;
-    right: 10px;
-    background: #f00;
-    color: #fff;
-    border: none;
     padding: 5px 10px;
     cursor: pointer;
     font-size: 0.9em;
+    border: none;
     border-radius: 3px;
+    transition: background-color 0.3s;
+  }
+  .delete-btn {
+    right: 10px;
+    background-color: #dc3545;
+    color: #fff;
+  }
+  .delete-btn:hover {
+    background-color: #c82333;
   }
   .settings-btn {
-    right: 50px;
-    background: #007BFF;
+    right: 80px;
+    background-color: #28a745;
+    color: #fff;
+  }
+  .settings-btn:hover {
+    background-color: #218838;
   }
 
   /* Modal Styles */
@@ -101,7 +124,8 @@
     border: 1px solid #888;
     width: 80%;
     max-width: 400px;
-    border-radius: 5px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   }
   .close {
     color: #aaa;
@@ -117,7 +141,7 @@
   /* Responsive Adjustments */
   @media (max-width: 600px) {
     .indicator {
-      padding: 10px;
+      padding: 15px;
     }
     .field-group input, .field-group select {
       width: 100%;
@@ -131,6 +155,12 @@
       top: 5px;
       padding: 3px 7px;
       font-size: 0.8em;
+    }
+    .settings-btn {
+      right: 70px;
+    }
+    .delete-btn {
+      right: 10px;
     }
   }
 </style>
@@ -167,103 +197,111 @@
       <input type="number" id="tick-count-input" min="10" max="120" value="60">
     </div>
     <div class="buttons">
-      <button id="save-settings-btn">Save Settings</button>
+      <button id="save-settings-btn" style="background-color: #007BFF; color: #fff; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">Save Settings</button>
     </div>
   </div>
 </div>
 
 <script>
-  // Global array to hold indicators
-  let indicators = [];
+// Global array to hold indicators
+let indicators = [];
 
-  // Conversion constants
-  const INCH_TO_MM = 25.4;
-  const MM_TO_INCH = 1 / INCH_TO_MM;
+// Conversion constants
+const INCH_TO_MM = 25.4;
+const MM_TO_INCH = 1 / INCH_TO_MM;
 
-  // Modal Elements
-  const modal = document.getElementById("settings-modal");
-  const closeModalBtn = document.getElementsByClassName("close")[0];
-  const saveSettingsBtn = document.getElementById("save-settings-btn");
-  const unitsSelect = document.getElementById("units-select");
-  const scaleInput = document.getElementById("scale-input");
-  const tickCountInput = document.getElementById("tick-count-input");
+// Modal Elements
+const modal = document.getElementById("settings-modal");
+const closeModalBtn = document.getElementsByClassName("close")[0];
+const saveSettingsBtn = document.getElementById("save-settings-btn");
+const unitsSelect = document.getElementById("units-select");
+const scaleInput = document.getElementById("scale-input");
+const tickCountInput = document.getElementById("tick-count-input");
 
-  let currentSettingsIndicator = null; // Indicator being edited
+let currentSettingsIndicator = null; // Indicator being edited
 
-  // Event listeners for modal
-  closeModalBtn.onclick = function() {
+// Event listeners for modal
+closeModalBtn.onclick = function() {
+  modal.style.display = "none";
+}
+
+window.onclick = function(event) {
+  if (event.target == modal) {
     modal.style.display = "none";
   }
+}
 
-  window.onclick = function(event) {
-    if (event.target == modal) {
-      modal.style.display = "none";
-    }
-  }
+saveSettingsBtn.onclick = function() {
+  if (currentSettingsIndicator) {
+    const units = unitsSelect.value;
+    const scale = parseFloat(scaleInput.value);
+    const tickCount = parseInt(tickCountInput.value);
 
-  saveSettingsBtn.onclick = function() {
-    if (currentSettingsIndicator) {
-      const units = unitsSelect.value;
-      const scale = parseFloat(scaleInput.value);
-      const tickCount = parseInt(tickCountInput.value);
-
-      currentSettingsIndicator.updateSettings(units, scale, tickCount);
-      modal.style.display = "none";
-    }
-  }
-
-  // Calculation functions
-  function angleToValue(angle, scale) {
-    if (angle > 180) angle -= 360;
-    let val = (angle / 180) * scale;
-    return val;
-  }
-
-  function valueToAngle(val, scale) {
-    if (val > scale) val = scale;
-    if (val < -scale) val = -scale;
-    let angle = (val / scale) * 180;
-    return angle;
-  }
-
-  function rotateNeedle(needle, angle) {
-    needle.setAttribute('transform', `rotate(${angle} 100 100)`);
-  }
-
-  // Indicator Class
-  class Indicator {
-    constructor() {
-      this.units = 'in'; // 'in' or 'mm'
-      this.scale = 0.015; // value per tick
-      this.tickCount = 60; // number of scale divisions
-
-      this.minVal = 0.0000;
-      this.maxVal = 0.0000;
-
-      this.createIndicator();
+    // Validate inputs
+    if (scale <= 0 || tickCount < 10) {
+      alert("Please enter valid scale and tick count values.");
+      return;
     }
 
-    createIndicator() {
-      const container = document.getElementById('indicators-container');
+    currentSettingsIndicator.updateSettings(units, scale, tickCount);
+    modal.style.display = "none";
+  }
+}
 
-      this.indicatorDiv = document.createElement('div');
-      this.indicatorDiv.className = 'indicator';
+// Calculation functions
+function angleToValue(angle, scale, tickCount) {
+  let halfRange = (scale * tickCount) / 2;
+  let value = (angle / 180) * halfRange;
+  return value;
+}
 
-      const title = document.createElement('h2');
-      title.textContent = 'Indicator';
-      this.indicatorDiv.appendChild(title);
+function valueToAngle(val, scale, tickCount) {
+  let halfRange = (scale * tickCount) / 2;
+  let angle = (val / halfRange) * 180;
+  return angle;
+}
 
-      // Delete Button
-      this.deleteBtn = document.createElement('button');
-      this.deleteBtn.className = 'delete-btn';
-      this.deleteBtn.textContent = 'Delete';
-      this.deleteBtn.addEventListener('click', () => {
-        indicators = indicators.filter(ind => ind !== this);
-        this.indicatorDiv.remove();
-      });
-      this.indicatorDiv.appendChild(this.deleteBtn);
+function rotateNeedle(needle, angle) {
+  needle.setAttribute('transform', `rotate(${angle} 100 100)`);
+}
 
-      // Settings Button
+// Indicator Class
+class Indicator {
+  constructor(isDefault = false) {
+    this.units = 'in'; // 'in' or 'mm'
+    this.scale = 0.015; // value per tick
+    this.tickCount = 60; // number of scale divisions
+
+    this.minVal = 0.0000;
+    this.maxVal = 0.0000;
+
+    this.isDefault = isDefault; // If it's the default indicator
+
+    this.createIndicator();
+  }
+
+  createIndicator() {
+    const container = document.getElementById('indicators-container');
+
+    this.indicatorDiv = document.createElement('div');
+    this.indicatorDiv.className = 'indicator';
+
+    const title = document.createElement('h2');
+    title.textContent = 'Runout Indicator';
+    this.indicatorDiv.appendChild(title);
+
+    // Delete Button
+    this.deleteBtn = document.createElement('button');
+    this.deleteBtn.className = 'delete-btn';
+    this.deleteBtn.textContent = 'Delete';
+    this.deleteBtn.addEventListener('click', () => {
+      indicators = indicators.filter(ind => ind !== this);
+      this.indicatorDiv.remove();
+    });
+    this.indicatorDiv.appendChild(this.deleteBtn);
+
+    // Settings Button (only for non-default indicators)
+    if (!this.isDefault) {
       this.settingsBtn = document.createElement('button');
       this.settingsBtn.className = 'settings-btn';
       this.settingsBtn.textContent = 'Settings';
@@ -276,410 +314,415 @@
         modal.style.display = "block";
       });
       this.indicatorDiv.appendChild(this.settingsBtn);
-
-      // Field Group 1: Part Name
-      const fieldGroup1 = document.createElement('div');
-      fieldGroup1.className = 'field-group';
-      const labelPart = document.createElement('label');
-      labelPart.textContent = 'Measured Part:';
-      this.inputPart = document.createElement('input');
-      this.inputPart.type = 'text';
-      this.inputPart.value = 'Unnamed';
-      labelPart.appendChild(this.inputPart);
-      fieldGroup1.appendChild(labelPart);
-      this.indicatorDiv.appendChild(fieldGroup1);
-
-      // Field Group 2: Min and Max
-      const fieldGroup2 = document.createElement('div');
-      fieldGroup2.className = 'field-group';
-
-      const labelMin = document.createElement('label');
-      labelMin.textContent = 'Minimum (Green):';
-      this.inputMin = document.createElement('input');
-      this.inputMin.type = 'number';
-      this.inputMin.step = '0.0001';
-      this.inputMin.value = '0.0000';
-      labelMin.appendChild(this.inputMin);
-      fieldGroup2.appendChild(labelMin);
-
-      const labelMax = document.createElement('label');
-      labelMax.textContent = 'Maximum (Red):';
-      this.inputMax = document.createElement('input');
-      this.inputMax.type = 'number';
-      this.inputMax.step = '0.0001';
-      this.inputMax.value = '0.0000';
-      labelMax.appendChild(this.inputMax);
-      fieldGroup2.appendChild(labelMax);
-
-      this.indicatorDiv.appendChild(fieldGroup2);
-
-      // Dial Container
-      const dialContainer = document.createElement('div');
-      dialContainer.className = 'dial-container';
-
-      const svgNS = "http://www.w3.org/2000/svg";
-      this.svg = document.createElementNS(svgNS, 'svg');
-      this.svg.setAttribute('viewBox', '0 0 200 200');
-      this.svg.setAttribute('class', 'dial-svg');
-
-      // Circle
-      const circle = document.createElementNS(svgNS, 'circle');
-      circle.setAttribute('cx', 100);
-      circle.setAttribute('cy', 100);
-      circle.setAttribute('r', 95);
-      circle.setAttribute('stroke', '#aaa');
-      circle.setAttribute('stroke-width', '4');
-      circle.setAttribute('fill', '#fff');
-      this.svg.appendChild(circle);
-
-      // Marks Group
-      this.marksGroup = document.createElementNS(svgNS, 'g');
-      this.marksGroup.setAttribute('id', 'marks');
-      this.svg.appendChild(this.marksGroup);
-
-      // Create Scale Marks
-      this.createScaleMarks();
-
-      // Needles
-      this.needleMin = document.createElementNS(svgNS, 'polygon');
-      this.needleMin.setAttribute('points', '100,20 97,100 103,100');
-      this.needleMin.setAttribute('fill', 'green');
-      this.svg.appendChild(this.needleMin);
-
-      this.needleMax = document.createElementNS(svgNS, 'polygon');
-      this.needleMax.setAttribute('points', '100,20 97,100 103,100');
-      this.needleMax.setAttribute('fill', 'red');
-      this.svg.appendChild(this.needleMax);
-
-      // Center Dot
-      const centerDot = document.createElementNS(svgNS, 'circle');
-      centerDot.setAttribute('cx', 100);
-      centerDot.setAttribute('cy', 100);
-      centerDot.setAttribute('r', 5);
-      centerDot.setAttribute('fill', '#444');
-      this.svg.appendChild(centerDot);
-
-      dialContainer.appendChild(this.svg);
-      this.indicatorDiv.appendChild(dialContainer);
-      container.appendChild(this.indicatorDiv);
-
-      // Initial Rotation
-      rotateNeedle(this.needleMin, 0);
-      rotateNeedle(this.needleMax, 0);
-      this.inputMin.value = angleToValue(0, this.scale).toFixed(4);
-      this.inputMax.value = angleToValue(0, this.scale).toFixed(4);
-
-      // Dragging Variables
-      this.dragging = false;
-      this.currentNeedle = null;
-      this.currentCenterX = 0;
-      this.currentCenterY = 0;
-
-      // Event Listeners
-      this.svg.addEventListener('mousedown', (e) => this.startDrag(e));
-      this.svg.addEventListener('touchstart', (e) => this.startDrag(e), {passive: false});
-      document.addEventListener('mousemove', (e) => this.drag(e));
-      document.addEventListener('touchmove', (e) => this.drag(e), {passive: false});
-      document.addEventListener('mouseup', () => this.endDrag());
-      document.addEventListener('touchend', () => this.endDrag());
-
-      // Input Change Events
-      this.inputMin.addEventListener('change', () => {
-        let val = parseFloat(this.inputMin.value);
-        if (isNaN(val)) return;
-        let angle = valueToAngle(val, this.scale);
-        rotateNeedle(this.needleMin, angle);
-      });
-
-      this.inputMax.addEventListener('change', () => {
-        let val = parseFloat(this.inputMax.value);
-        if (isNaN(val)) return;
-        let angle = valueToAngle(val, this.scale);
-        rotateNeedle(this.needleMax, angle);
-      });
     }
 
-    createScaleMarks() {
-      // Clear existing marks
-      while (this.marksGroup.firstChild) {
-        this.marksGroup.removeChild(this.marksGroup.firstChild);
-      }
+    // Field Group 1: Part Name
+    const fieldGroup1 = document.createElement('div');
+    fieldGroup1.className = 'field-group';
+    const labelPart = document.createElement('label');
+    labelPart.textContent = 'Measured Part:';
+    this.inputPart = document.createElement('input');
+    this.inputPart.type = 'text';
+    this.inputPart.value = 'Unnamed';
+    labelPart.appendChild(this.inputPart);
+    fieldGroup1.appendChild(labelPart);
+    this.indicatorDiv.appendChild(fieldGroup1);
 
-      const totalLines = this.tickCount;
-      const lineSpacing = 360 / totalLines;
-      for (let i = 0; i < totalLines; i++) {
-        let angle = i * lineSpacing;
-        let length = (i % (totalLines / 10) === 0) ? 10 : 5; // Major ticks every 10 divisions
-        let rOuter = 95;
-        let rInner = 95 - length;
-        let rad = (angle - 90) * Math.PI / 180;
-        let xOuter = 100 + rOuter * Math.cos(rad);
-        let yOuter = 100 + rOuter * Math.sin(rad);
-        let xInner = 100 + rInner * Math.cos(rad);
-        let yInner = 100 + rInner * Math.sin(rad);
+    // Field Group 2: Min and Max
+    const fieldGroup2 = document.createElement('div');
+    fieldGroup2.className = 'field-group';
 
-        // Tick Line
-        const line = document.createElementNS("http://www.w3.org/2000/svg", 'line');
-        line.setAttribute('x1', xInner);
-        line.setAttribute('y1', yInner);
-        line.setAttribute('x2', xOuter);
-        line.setAttribute('y2', yOuter);
-        line.setAttribute('stroke', '#333');
-        line.setAttribute('stroke-width', '1');
-        this.marksGroup.appendChild(line);
+    const labelMin = document.createElement('label');
+    labelMin.textContent = 'Minimum (Green):';
+    this.inputMin = document.createElement('input');
+    this.inputMin.type = 'number';
+    this.inputMin.step = '0.0001';
+    this.inputMin.value = '0.0000';
+    labelMin.appendChild(this.inputMin);
+    fieldGroup2.appendChild(labelMin);
 
-        // Tick Label for Major Ticks
-        if (length === 10) {
-          let displayValue = angleToValue(angle, this.scale);
-          let displayUnits = this.units === 'in' ? '"' : 'mm';
-          let labelX = 100 + (rInner - 15) * Math.cos(rad);
-          let labelY = 100 + (rInner - 15) * Math.sin(rad);
-          const text = document.createElementNS("http://www.w3.org/2000/svg", 'text');
-          text.setAttribute('x', labelX);
-          text.setAttribute('y', labelY);
-          text.setAttribute('font-size', '10');
-          text.setAttribute('fill', '#333');
-          text.setAttribute('text-anchor', 'middle');
-          text.textContent = displayValue.toFixed(4) + displayUnits;
-          this.marksGroup.appendChild(text);
-        }
-      }
-    }
+    const labelMax = document.createElement('label');
+    labelMax.textContent = 'Maximum (Red):';
+    this.inputMax = document.createElement('input');
+    this.inputMax.type = 'number';
+    this.inputMax.step = '0.0001';
+    this.inputMax.value = '0.0000';
+    labelMax.appendChild(this.inputMax);
+    fieldGroup2.appendChild(labelMax);
 
-    updateSettings(units, scale, tickCount) {
-      this.units = units;
-      this.scale = scale;
-      this.tickCount = tickCount;
+    this.indicatorDiv.appendChild(fieldGroup2);
 
-      // Update Scale Marks
-      this.createScaleMarks();
+    // Dial Container
+    const dialContainer = document.createElement('div');
+    dialContainer.className = 'dial-container';
 
-      // Update Existing Needle Values
-      rotateNeedle(this.needleMin, valueToAngle(parseFloat(this.inputMin.value), this.scale));
-      rotateNeedle(this.needleMax, valueToAngle(parseFloat(this.inputMax.value), this.scale));
+    const svgNS = "http://www.w3.org/2000/svg";
+    this.svg = document.createElementNS(svgNS, 'svg');
+    this.svg.setAttribute('viewBox', '0 0 200 200');
+    this.svg.setAttribute('class', 'dial-svg');
 
-      // Update Labels
-      this.inputMin.value = angleToValue(valueToAngle(parseFloat(this.inputMin.value), this.scale), this.scale).toFixed(4);
-      this.inputMax.value = angleToValue(valueToAngle(parseFloat(this.inputMax.value), this.scale), this.scale).toFixed(4);
-    }
+    // Circle
+    const circle = document.createElementNS(svgNS, 'circle');
+    circle.setAttribute('cx', 100);
+    circle.setAttribute('cy', 100);
+    circle.setAttribute('r', 95);
+    circle.setAttribute('stroke', '#aaa');
+    circle.setAttribute('stroke-width', '4');
+    circle.setAttribute('fill', '#fff');
+    this.svg.appendChild(circle);
 
-    startDrag(e) {
-      e.preventDefault();
-      if (e.type === 'mousedown') {
-        if (e.target === this.needleMin || e.target === this.needleMax) {
-          this.dragging = true;
-          this.currentNeedle = e.target;
-          this.updateCenter();
-        }
-      } else if (e.type === 'touchstart') {
-        const touch = e.touches[0];
-        const target = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (target === this.needleMin || target === this.needleMax) {
-          this.dragging = true;
-          this.currentNeedle = target;
-          this.updateCenter();
-        }
-      }
-    }
+    // Marks Group
+    this.marksGroup = document.createElementNS(svgNS, 'g');
+    this.marksGroup.setAttribute('id', 'marks');
+    this.svg.appendChild(this.marksGroup);
 
-    drag(e) {
-      if (!this.dragging || !this.currentNeedle) return;
+    // Create Scale Marks
+    this.createScaleMarks();
 
-      let clientX, clientY;
+    // Needles
+    this.needleMin = document.createElementNS(svgNS, 'polygon');
+    this.needleMin.setAttribute('points', '100,20 97,100 103,100');
+    this.needleMin.setAttribute('fill', 'green');
+    this.svg.appendChild(this.needleMin);
 
-      if (e.type.startsWith('mouse')) {
-        clientX = e.clientX;
-        clientY = e.clientY;
-      } else if (e.type.startsWith('touch')) {
-        const touch = e.touches[0];
-        clientX = touch.clientX;
-        clientY = touch.clientY;
-      }
+    this.needleMax = document.createElementNS(svgNS, 'polygon');
+    this.needleMax.setAttribute('points', '100,20 97,100 103,100');
+    this.needleMax.setAttribute('fill', 'red');
+    this.svg.appendChild(this.needleMax);
 
-      const dx = clientX - this.currentCenterX;
-      const dy = clientY - this.currentCenterY;
-      let rad = Math.atan2(dy, dx);
-      let deg = rad * 180 / Math.PI;
-      let angle = deg + 90;
-      if (angle > 180) angle -= 360;
-      rotateNeedle(this.currentNeedle, angle);
-      let val = angleToValue(angle, this.scale).toFixed(4);
-      if (this.currentNeedle === this.needleMin) {
-        this.inputMin.value = val;
-      } else {
-        this.inputMax.value = val;
-      }
-    }
+    // Center Dot
+    const centerDot = document.createElementNS(svgNS, 'circle');
+    centerDot.setAttribute('cx', 100);
+    centerDot.setAttribute('cy', 100);
+    centerDot.setAttribute('r', 5);
+    centerDot.setAttribute('fill', '#444');
+    this.svg.appendChild(centerDot);
 
-    endDrag() {
-      this.dragging = false;
-      this.currentNeedle = null;
-    }
+    dialContainer.appendChild(this.svg);
+    this.indicatorDiv.appendChild(dialContainer);
+    container.appendChild(this.indicatorDiv);
 
-    updateCenter() {
-      const rect = this.svg.getBoundingClientRect();
-      this.currentCenterX = rect.left + rect.width / 2;
-      this.currentCenterY = rect.top + rect.height / 2;
-    }
+    // Initial Rotation
+    rotateNeedle(this.needleMin, 0);
+    rotateNeedle(this.needleMax, 0);
+    this.inputMin.value = angleToValue(0, this.scale, this.tickCount).toFixed(4);
+    this.inputMax.value = angleToValue(0, this.scale, this.tickCount).toFixed(4);
 
-    getData() {
-      // Convert min and max to both units
-      let minVal = parseFloat(this.inputMin.value);
-      let maxVal = parseFloat(this.inputMax.value);
-      let variation = maxVal - minVal;
+    // Dragging Variables
+    this.dragging = false;
+    this.currentNeedle = null;
+    this.currentCenterX = 0;
+    this.currentCenterY = 0;
 
-      let minIn, minMm, maxIn, maxMm, variationIn, variationMm;
+    // Event Listeners
+    this.svg.addEventListener('mousedown', (e) => this.startDrag(e));
+    this.svg.addEventListener('touchstart', (e) => this.startDrag(e), {passive: false});
+    document.addEventListener('mousemove', (e) => this.drag(e));
+    document.addEventListener('touchmove', (e) => this.drag(e), {passive: false});
+    document.addEventListener('mouseup', () => this.endDrag());
+    document.addEventListener('touchend', () => this.endDrag());
 
-      if (this.units === 'in') {
-        minIn = minVal.toFixed(4);
-        minMm = (minVal * INCH_TO_MM).toFixed(4);
-        maxIn = maxVal.toFixed(4);
-        maxMm = (maxVal * INCH_TO_MM).toFixed(4);
-        variationIn = variation.toFixed(4);
-        variationMm = (variation * INCH_TO_MM).toFixed(4);
-      } else {
-        minMm = minVal.toFixed(4);
-        minIn = (minVal * MM_TO_INCH).toFixed(4);
-        maxMm = maxVal.toFixed(4);
-        maxIn = (maxVal * MM_TO_INCH).toFixed(4);
-        variationMm = variation.toFixed(4);
-        variationIn = (variation * MM_TO_INCH).toFixed(4);
-      }
+    // Input Change Events
+    this.inputMin.addEventListener('change', () => {
+      let val = parseFloat(this.inputMin.value);
+      if (isNaN(val)) return;
+      let angle = valueToAngle(val, this.scale, this.tickCount);
+      rotateNeedle(this.needleMin, angle);
+    });
 
-      return {
-        partName: this.inputPart.value,
-        minValIn: minIn,
-        minValMm: minMm,
-        maxValIn: maxIn,
-        maxValMm: maxMm,
-        variationIn: variationIn,
-        variationMm: variationMm,
-        svgElement: this.svg
-      };
-    }
-  }
-
-  // Function to create a new indicator
-  function createIndicator() {
-    const indicator = new Indicator();
-    indicators.push(indicator);
-  }
-
-  // Event listener to add a new indicator
-  document.getElementById('add-indicator-btn').addEventListener('click', () => {
-    createIndicator();
-  });
-
-  // Create the first indicator by default
-  createIndicator();
-
-  // Function to convert SVG to PNG data URL
-  async function svgToPngDataUrl(svgElement) {
-    return new Promise((resolve) => {
-      let serializer = new XMLSerializer();
-      let svgString = serializer.serializeToString(svgElement);
-      let img = new Image();
-      let svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
-      let url = URL.createObjectURL(svgBlob);
-      img.onload = function() {
-        let canvas = document.createElement('canvas');
-        // Maintain high quality
-        canvas.width = 200; 
-        canvas.height = 200;
-        let ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        let png = canvas.toDataURL('image/png');
-        resolve(png);
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
+    this.inputMax.addEventListener('change', () => {
+      let val = parseFloat(this.inputMax.value);
+      if (isNaN(val)) return;
+      let angle = valueToAngle(val, this.scale, this.tickCount);
+      rotateNeedle(this.needleMax, angle);
     });
   }
 
-  // Event listener to export data to Excel
-  document.getElementById('export-button').addEventListener('click', async () => {
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Runout Data');
-
-    // Define columns
-    worksheet.columns = [
-      { header: 'Part', key: 'part', width: 25 },
-      { header: 'Minimum (in)', key: 'minIn', width: 15 },
-      { header: 'Minimum (mm)', key: 'minMm', width: 15 },
-      { header: 'Maximum (in)', key: 'maxIn', width: 15 },
-      { header: 'Maximum (mm)', key: 'maxMm', width: 15 },
-      { header: 'Variation (± in)', key: 'varIn', width: 15 },
-      { header: 'Variation (± mm)', key: 'varMm', width: 15 },
-      { header: 'Indicator', key: 'indicator', width: 30 }
-    ];
-
-    // Add headers in bold
-    worksheet.getRow(1).font = { bold: true };
-
-    for (let ind of indicators) {
-      let data = ind.getData();
-      let pngDataUrl = await svgToPngDataUrl(data.svgElement);
-
-      worksheet.addRow({
-        part: data.partName,
-        minIn: data.minValIn,
-        minMm: data.minValMm,
-        maxIn: data.maxValIn,
-        maxMm: data.maxValMm,
-        varIn: `±${data.variationIn}`,
-        varMm: `±${data.variationMm}`,
-        indicator: ''
-      });
-
-      let lastRowNumber = worksheet.lastRow.number;
-      // Set row height to accommodate image
-      worksheet.getRow(lastRowNumber).height = 150; 
-
-      // Center alignment
-      for (let j = 1; j <= 8; j++) {
-        let cell = worksheet.getCell(lastRowNumber, j);
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      }
-
-      // Add image
-      let base64 = pngDataUrl.split(',')[1];
-      const imageId = workbook.addImage({
-        base64: base64,
-        extension: 'png'
-      });
-
-      // Insert image into the last row's 'Indicator' column (column 8, index 7)
-      worksheet.addImage(imageId, {
-        tl: { col: 7, row: lastRowNumber - 1 },
-        ext: { width: 200, height: 200 }
-      });
+  createScaleMarks() {
+    // Clear existing marks
+    while (this.marksGroup.firstChild) {
+      this.marksGroup.removeChild(this.marksGroup.firstChild);
     }
 
-    // Apply borders to all cells
-    for (let i = 1; i <= worksheet.lastRow.number; i++) {
-      for (let j = 1; j <= 8; j++) {
-        let cell = worksheet.getCell(i, j);
-        cell.border = {
-          top: {style:'thin'},
-          left: {style:'thin'},
-          bottom: {style:'thin'},
-          right: {style:'thin'}
-        };
+    const totalLines = this.tickCount;
+    const lineSpacing = 360 / totalLines;
+    for (let i = 0; i < totalLines; i++) {
+      let angle = i * lineSpacing;
+      let majorTickInterval = Math.floor(totalLines / 10); // Major ticks every 10%
+      let length = (i % majorTickInterval === 0) ? 10 : 5; // Major ticks
+      let rOuter = 95;
+      let rInner = 95 - length;
+      let rad = (angle - 90) * Math.PI / 180;
+      let xOuter = 100 + rOuter * Math.cos(rad);
+      let yOuter = 100 + rOuter * Math.sin(rad);
+      let xInner = 100 + rInner * Math.cos(rad);
+      let yInner = 100 + rInner * Math.sin(rad);
+
+      // Tick Line
+      const line = document.createElementNS("http://www.w3.org/2000/svg", 'line');
+      line.setAttribute('x1', xInner);
+      line.setAttribute('y1', yInner);
+      line.setAttribute('x2', xOuter);
+      line.setAttribute('y2', yOuter);
+      line.setAttribute('stroke', '#333');
+      line.setAttribute('stroke-width', '1');
+      this.marksGroup.appendChild(line);
+
+      // Tick Label for Major Ticks
+      if (length === 10) {
+        let displayValue = angleToValue(angle, this.scale, this.tickCount);
+        let displayUnits = this.units === 'in' ? '"' : 'mm';
+        let labelX = 100 + (rInner - 15) * Math.cos(rad);
+        let labelY = 100 + (rInner - 15) * Math.sin(rad);
+        const text = document.createElementNS("http://www.w3.org/2000/svg", 'text');
+        text.setAttribute('x', labelX);
+        text.setAttribute('y', labelY);
+        text.setAttribute('font-size', '10');
+        text.setAttribute('fill', '#333');
+        text.setAttribute('text-anchor', 'middle');
+        text.textContent = displayValue.toFixed(2) + displayUnits;
+        this.marksGroup.appendChild(text);
       }
     }
+  }
 
-    // Generate Excel file and download
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
+  updateSettings(units, scale, tickCount) {
+    this.units = units;
+    this.scale = scale;
+    this.tickCount = tickCount;
 
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'runout_data.xlsx';
-    a.click();
+    // Update Scale Marks
+    this.createScaleMarks();
 
-    URL.revokeObjectURL(url);
+    // Update Existing Needle Values
+    let currentMinVal = parseFloat(this.inputMin.value);
+    let currentMaxVal = parseFloat(this.inputMax.value);
+    rotateNeedle(this.needleMin, valueToAngle(currentMinVal, this.scale, this.tickCount));
+    rotateNeedle(this.needleMax, valueToAngle(currentMaxVal, this.scale, this.tickCount));
+
+    // Update Labels
+    this.inputMin.value = angleToValue(valueToAngle(currentMinVal, this.scale, this.tickCount), this.scale, this.tickCount).toFixed(4);
+    this.inputMax.value = angleToValue(valueToAngle(currentMaxVal, this.scale, this.tickCount), this.scale, this.tickCount).toFixed(4);
+  }
+
+  startDrag(e) {
+    e.preventDefault();
+    if (e.type === 'mousedown') {
+      if (e.target === this.needleMin || e.target === this.needleMax) {
+        this.dragging = true;
+        this.currentNeedle = e.target;
+        this.updateCenter();
+      }
+    } else if (e.type === 'touchstart') {
+      const touch = e.touches[0];
+      const target = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (target === this.needleMin || target === this.needleMax) {
+        this.dragging = true;
+        this.currentNeedle = target;
+        this.updateCenter();
+      }
+    }
+  }
+
+  drag(e) {
+    if (!this.dragging || !this.currentNeedle) return;
+
+    let clientX, clientY;
+
+    if (e.type.startsWith('mouse')) {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    } else if (e.type.startsWith('touch')) {
+      const touch = e.touches[0];
+      clientX = touch.clientX;
+      clientY = touch.clientY;
+    }
+
+    const dx = clientX - this.currentCenterX;
+    const dy = clientY - this.currentCenterY;
+    let rad = Math.atan2(dy, dx);
+    let deg = rad * 180 / Math.PI;
+    let angle = deg + 90;
+    if (angle > 180) angle -= 360;
+    rotateNeedle(this.currentNeedle, angle);
+    let val = angleToValue(angle, this.scale, this.tickCount).toFixed(4);
+    if (this.currentNeedle === this.needleMin) {
+      this.inputMin.value = val;
+    } else {
+      this.inputMax.value = val;
+    }
+  }
+
+  endDrag() {
+    this.dragging = false;
+    this.currentNeedle = null;
+  }
+
+  updateCenter() {
+    const rect = this.svg.getBoundingClientRect();
+    this.currentCenterX = rect.left + rect.width / 2;
+    this.currentCenterY = rect.top + rect.height / 2;
+  }
+
+  getData() {
+    // Convert min and max to both units
+    let minVal = parseFloat(this.inputMin.value);
+    let maxVal = parseFloat(this.inputMax.value);
+    let variation = maxVal - minVal;
+
+    let minIn, minMm, maxIn, maxMm, variationIn, variationMm;
+
+    if (this.units === 'in') {
+      minIn = minVal.toFixed(4);
+      minMm = (minVal * INCH_TO_MM).toFixed(4);
+      maxIn = maxVal.toFixed(4);
+      maxMm = (maxVal * INCH_TO_MM).toFixed(4);
+      variationIn = variation.toFixed(4);
+      variationMm = (variation * INCH_TO_MM).toFixed(4);
+    } else {
+      minMm = minVal.toFixed(4);
+      minIn = (minVal * MM_TO_INCH).toFixed(4);
+      maxMm = maxVal.toFixed(4);
+      maxIn = (maxVal * MM_TO_INCH).toFixed(4);
+      variationMm = variation.toFixed(4);
+      variationIn = (variation * MM_TO_INCH).toFixed(4);
+    }
+
+    return {
+      partName: this.inputPart.value,
+      minValIn: minIn,
+      minValMm: minMm,
+      maxValIn: maxIn,
+      maxValMm: maxMm,
+      variationIn: `±${variationIn}`,
+      variationMm: `±${variationMm}`,
+      svgElement: this.svg
+    };
+  }
+}
+
+// Function to create a new indicator
+function createIndicator(isDefault = false) {
+  const indicator = new Indicator(isDefault);
+  indicators.push(indicator);
+}
+
+// Event listener to add a new indicator
+document.getElementById('add-indicator-btn').addEventListener('click', () => {
+  createIndicator();
+});
+
+// Create the first (default) indicator by default
+createIndicator(true);
+
+// Function to convert SVG to PNG data URL
+async function svgToPngDataUrl(svgElement) {
+  return new Promise((resolve) => {
+    let serializer = new XMLSerializer();
+    let svgString = serializer.serializeToString(svgElement);
+    let img = new Image();
+    let svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+    let url = URL.createObjectURL(svgBlob);
+    img.onload = function() {
+      let canvas = document.createElement('canvas');
+      // Maintain high quality
+      canvas.width = 200; 
+      canvas.height = 200;
+      let ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      let png = canvas.toDataURL('image/png');
+      resolve(png);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
   });
+}
+
+// Event listener to export data to Excel
+document.getElementById('export-button').addEventListener('click', async () => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Runout Data');
+
+  // Define columns
+  worksheet.columns = [
+    { header: 'Part', key: 'part', width: 25 },
+    { header: 'Minimum (in)', key: 'minIn', width: 15 },
+    { header: 'Minimum (mm)', key: 'minMm', width: 15 },
+    { header: 'Maximum (in)', key: 'maxIn', width: 15 },
+    { header: 'Maximum (mm)', key: 'maxMm', width: 15 },
+    { header: 'Variation (± in)', key: 'varIn', width: 15 },
+    { header: 'Variation (± mm)', key: 'varMm', width: 15 },
+    { header: 'Indicator', key: 'indicator', width: 30 }
+  ];
+
+  // Add headers in bold
+  worksheet.getRow(1).font = { bold: true };
+
+  for (let ind of indicators) {
+    let data = ind.getData();
+    let pngDataUrl = await svgToPngDataUrl(data.svgElement);
+
+    // Add row data
+    worksheet.addRow({
+      part: data.partName,
+      minIn: data.minValIn,
+      minMm: data.minValMm,
+      maxIn: data.maxValIn,
+      maxMm: data.maxValMm,
+      varIn: data.variationIn,
+      varMm: data.variationMm,
+      indicator: ''
+    });
+
+    let lastRowNumber = worksheet.lastRow.number;
+    // Set row height to accommodate image
+    worksheet.getRow(lastRowNumber).height = 150; 
+
+    // Center alignment
+    for (let j = 1; j <= 8; j++) {
+      let cell = worksheet.getCell(lastRowNumber, j);
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    }
+
+    // Add image
+    let base64 = pngDataUrl.split(',')[1];
+    const imageId = workbook.addImage({
+      base64: base64,
+      extension: 'png'
+    });
+
+    // Insert image into the last row's 'Indicator' column (column 8, index 7)
+    worksheet.addImage(imageId, {
+      tl: { col: 7, row: lastRowNumber - 1 },
+      ext: { width: 200, height: 200 }
+    });
+  }
+
+  // Apply borders to all cells
+  for (let i = 1; i <= worksheet.lastRow.number; i++) {
+    for (let j = 1; j <= 8; j++) {
+      let cell = worksheet.getCell(i, j);
+      cell.border = {
+        top: {style:'thin'},
+        left: {style:'thin'},
+        bottom: {style:'thin'},
+        right: {style:'thin'}
+      };
+    }
+  }
+
+  // Generate Excel file and download
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'runout_data.xlsx';
+  a.click();
+
+  URL.revokeObjectURL(url);
+});
 </script>
 </body>
 </html>
