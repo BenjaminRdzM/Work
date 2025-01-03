@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Indicador de Runout 360° con Ajustes Finales</title>
+<title>Runout Indicator 360° with Advanced Settings</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -14,17 +14,17 @@
     text-align: center;
     font-size: 1.5em;
   }
-  .medidor {
+  .indicator {
     border: 1px solid #ccc;
     margin: 20px auto;
     padding: 20px;
     width: 90%;
-    max-width: 500px;
+    max-width: 600px;
     background: #fff;
     position: relative;
     box-sizing: border-box;
   }
-  .medidor h2 {
+  .indicator h2 {
     font-size: 1.2em;
     margin-bottom: 10px;
     text-align: center;
@@ -37,9 +37,9 @@
     display: block;
     margin: 5px 0;
   }
-  .field-group input {
+  .field-group input, .field-group select {
     width: 80%;
-    max-width: 150px;
+    max-width: 200px;
     padding: 5px;
     text-align: right;
     box-sizing: border-box;
@@ -58,13 +58,13 @@
     text-align: center;
     margin: 20px;
   }
-  #add-medidor-btn, #export-button {
+  #add-indicator-btn, #export-button {
     margin: 10px;
     padding: 10px 20px;
     font-size: 1em;
     cursor: pointer;
   }
-  .delete-btn {
+  .delete-btn, .settings-btn {
     position: absolute;
     top: 10px;
     right: 10px;
@@ -76,23 +76,59 @@
     font-size: 0.9em;
     border-radius: 3px;
   }
+  .settings-btn {
+    right: 50px;
+    background: #007BFF;
+  }
 
-  /* Ajustes para pantallas pequeñas */
+  /* Modal Styles */
+  .modal {
+    display: none; 
+    position: fixed; 
+    z-index: 100; 
+    padding-top: 100px; 
+    left: 0;
+    top: 0;
+    width: 100%; 
+    height: 100%; 
+    overflow: auto; 
+    background-color: rgba(0,0,0,0.4); 
+  }
+  .modal-content {
+    background-color: #fefefe;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 400px;
+    border-radius: 5px;
+  }
+  .close {
+    color: #aaa;
+    float: right;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .close:hover, .close:focus {
+    color: black;
+  }
+
+  /* Responsive Adjustments */
   @media (max-width: 600px) {
-    .medidor {
+    .indicator {
       padding: 10px;
     }
-    .field-group input {
+    .field-group input, .field-group select {
       width: 100%;
       max-width: none;
     }
-    #add-medidor-btn, #export-button {
+    #add-indicator-btn, #export-button {
       width: 100%;
       margin: 5px 0;
     }
-    .delete-btn {
+    .delete-btn, .settings-btn {
       top: 5px;
-      right: 5px;
       padding: 3px 7px;
       font-size: 0.8em;
     }
@@ -101,390 +137,549 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 </head>
 <body>
-<h1>Indicadores de Runout 360°</h1>
+<h1>Runout Indicators 360°</h1>
 
 <div class="buttons">
-  <button id="add-medidor-btn">Agregar otro medidor</button>
-  <button id="export-button">Exportar a Excel (XLSX)</button>
+  <button id="add-indicator-btn">Add Another Indicator</button>
+  <button id="export-button">Export to Excel (XLSX)</button>
 </div>
 
-<div id="medidores-container"></div>
+<div id="indicators-container"></div>
+
+<!-- Modal Structure -->
+<div id="settings-modal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h3>Indicator Settings</h3>
+    <div class="field-group">
+      <label for="units-select">Units:</label>
+      <select id="units-select">
+        <option value="mm">Millimeters (mm)</option>
+        <option value="in">Inches (in)</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label for="scale-input">Scale (value per tick):</label>
+      <input type="number" id="scale-input" step="0.0001" value="0.015">
+    </div>
+    <div class="field-group">
+      <label for="tick-count-input">Number of Scale Divisions:</label>
+      <input type="number" id="tick-count-input" min="10" max="120" value="60">
+    </div>
+    <div class="buttons">
+      <button id="save-settings-btn">Save Settings</button>
+    </div>
+  </div>
+</div>
 
 <script>
-// Arreglo global de medidores
-let medidores = [];
+  // Global array to hold indicators
+  let indicators = [];
 
-// Funciones de cálculo
-function angleToValue(angle) {
-  if (angle > 180) angle -= 360;
-  let val = (angle / 180) * 0.015;
-  return val;
-}
+  // Conversion constants
+  const INCH_TO_MM = 25.4;
+  const MM_TO_INCH = 1 / INCH_TO_MM;
 
-function valueToAngle(val) {
-  if (val > 0.015) val = 0.015;
-  if (val < -0.015) val = -0.015;
-  let angle = (val / 0.015) * 180;
-  return angle;
-}
+  // Modal Elements
+  const modal = document.getElementById("settings-modal");
+  const closeModalBtn = document.getElementsByClassName("close")[0];
+  const saveSettingsBtn = document.getElementById("save-settings-btn");
+  const unitsSelect = document.getElementById("units-select");
+  const scaleInput = document.getElementById("scale-input");
+  const tickCountInput = document.getElementById("tick-count-input");
 
-function rotateNeedle(needle, angle) {
-  needle.setAttribute('transform', `rotate(${angle} 100 100)`);
-}
+  let currentSettingsIndicator = null; // Indicator being edited
 
-function createMedidor() {
-  const container = document.getElementById('medidores-container');
+  // Event listeners for modal
+  closeModalBtn.onclick = function() {
+    modal.style.display = "none";
+  }
 
-  const medidorDiv = document.createElement('div');
-  medidorDiv.className = 'medidor';
-
-  const title = document.createElement('h2');
-  title.textContent = 'Medidor';
-
-  // Botón para eliminar este medidor
-  const deleteBtn = document.createElement('button');
-  deleteBtn.className = 'delete-btn';
-  deleteBtn.textContent = 'X';
-  deleteBtn.addEventListener('click', () => {
-    medidores = medidores.filter(m => m.medidorDiv !== medidorDiv);
-    medidorDiv.remove();
-  });
-  medidorDiv.appendChild(deleteBtn);
-
-  const fieldGroup1 = document.createElement('div');
-  fieldGroup1.className = 'field-group';
-  const labelPart = document.createElement('label');
-  labelPart.textContent = 'Parte medida: ';
-  const inputPart = document.createElement('input');
-  inputPart.type = 'text';
-  inputPart.value = 'Sin nombre';
-  labelPart.appendChild(inputPart);
-  fieldGroup1.appendChild(labelPart);
-
-  const fieldGroup2 = document.createElement('div');
-  fieldGroup2.className = 'field-group';
-  const labelMin = document.createElement('label');
-  labelMin.textContent = 'Mínimo (verde): ';
-  const inputMin = document.createElement('input');
-  inputMin.type = 'text';
-  inputMin.value = '0.0000';
-  labelMin.appendChild(inputMin);
-
-  const labelMax = document.createElement('label');
-  labelMax.textContent = 'Máximo (rojo): ';
-  const inputMax = document.createElement('input');
-  inputMax.type = 'text';
-  inputMax.value = '0.0000';
-  labelMax.appendChild(inputMax);
-
-  fieldGroup2.appendChild(labelMin);
-  fieldGroup2.appendChild(labelMax);
-
-  const dialContainer = document.createElement('div');
-  dialContainer.className = 'dial-container';
-
-  const svgNS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('viewBox', '0 0 200 200');
-  svg.setAttribute('id', 'dial-svg');
-
-  const circle = document.createElementNS(svgNS, 'circle');
-  circle.setAttribute('cx', 100);
-  circle.setAttribute('cy', 100);
-  circle.setAttribute('r', 95);
-  circle.setAttribute('stroke', '#aaa');
-  circle.setAttribute('stroke-width', '4');
-  circle.setAttribute('fill', '#fff');
-  svg.appendChild(circle);
-
-  const marksGroup = document.createElementNS(svgNS, 'g');
-  marksGroup.setAttribute('id', 'marks');
-  svg.appendChild(marksGroup);
-
-  const totalLines = 60;
-  const lineSpacing = 360 / totalLines;
-  for (let i = 0; i < totalLines; i++) {
-    let angle = i * lineSpacing;
-    let length = (i % 10 === 0) ? 10 : 5;
-    let rOuter = 95;
-    let rInner = 95 - length;
-    let rad = (angle - 90) * Math.PI / 180;
-    let xOuter = 100 + rOuter * Math.cos(rad);
-    let yOuter = 100 + rOuter * Math.sin(rad);
-    let xInner = 100 + rInner * Math.cos(rad);
-    let yInner = 100 + rInner * Math.sin(rad);
-
-    const line = document.createElementNS(svgNS, 'line');
-    line.setAttribute('x1', xInner);
-    line.setAttribute('y1', yInner);
-    line.setAttribute('x2', xOuter);
-    line.setAttribute('y2', yOuter);
-    line.setAttribute('stroke', '#333');
-    line.setAttribute('stroke-width', '1');
-    marksGroup.appendChild(line);
-
-    if (i % 10 === 0) {
-      let displayAngle = angle;
-      if (displayAngle > 180) displayAngle -= 360;
-      let val = angleToValue(displayAngle);
-      let tx = 100 + (rInner - 15) * Math.cos(rad);
-      let ty = 100 + (rInner - 15) * Math.sin(rad);
-      const text = document.createElementNS(svgNS, 'text');
-      text.setAttribute('x', tx);
-      text.setAttribute('y', ty);
-      text.setAttribute('font-size', '10');
-      text.setAttribute('fill', '#333');
-      text.setAttribute('text-anchor', 'middle');
-      text.textContent = val.toFixed(4) + '"';
-      marksGroup.appendChild(text);
+  window.onclick = function(event) {
+    if (event.target == modal) {
+      modal.style.display = "none";
     }
   }
 
-  const needleMin = document.createElementNS(svgNS, 'polygon');
-  needleMin.setAttribute('points', '100,20 97,100 103,100');
-  needleMin.setAttribute('fill', 'green');
-  svg.appendChild(needleMin);
+  saveSettingsBtn.onclick = function() {
+    if (currentSettingsIndicator) {
+      const units = unitsSelect.value;
+      const scale = parseFloat(scaleInput.value);
+      const tickCount = parseInt(tickCountInput.value);
 
-  const needleMax = document.createElementNS(svgNS, 'polygon');
-  needleMax.setAttribute('points', '100,20 97,100 103,100');
-  needleMax.setAttribute('fill', 'red');
-  svg.appendChild(needleMax);
-
-  const centerDot = document.createElementNS(svgNS, 'circle');
-  centerDot.setAttribute('cx', 100);
-  centerDot.setAttribute('cy', 100);
-  centerDot.setAttribute('r', 5);
-  centerDot.setAttribute('fill', '#444');
-  svg.appendChild(centerDot);
-
-  dialContainer.appendChild(svg);
-
-  medidorDiv.appendChild(title);
-  medidorDiv.appendChild(fieldGroup1);
-  medidorDiv.appendChild(fieldGroup2);
-  medidorDiv.appendChild(dialContainer);
-
-  container.appendChild(medidorDiv);
-
-  rotateNeedle(needleMin, 0);
-  rotateNeedle(needleMax, 0);
-  inputMin.value = angleToValue(0).toFixed(4);
-  inputMax.value = angleToValue(0).toFixed(4);
-
-  // Manejo de arrastre independiente
-  let dragging = false;
-  let currentNeedle = null;
-  let currentCenterX = 0;
-  let currentCenterY = 0;
-
-  // Función para actualizar el centro
-  function updateCenter() {
-    const rect = svg.getBoundingClientRect();
-    currentCenterX = rect.left + rect.width / 2;
-    currentCenterY = rect.top + rect.height / 2;
+      currentSettingsIndicator.updateSettings(units, scale, tickCount);
+      modal.style.display = "none";
+    }
   }
 
-  // Actualizar el centro al cargar y al cambiar el tamaño
-  updateCenter();
-  window.addEventListener('resize', updateCenter);
-
-  // Eventos para mouse
-  svg.addEventListener('mousedown', (e) => {
-    if (e.target === needleMin || e.target === needleMax) {
-      dragging = true;
-      currentNeedle = e.target;
-      updateCenter();
-      e.preventDefault();
-    }
-  });
-
-  // Eventos para touch
-  svg.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    if (target === needleMin || target === needleMax) {
-      dragging = true;
-      currentNeedle = target;
-      updateCenter();
-      e.preventDefault();
-    }
-  }, {passive: false});
-
-  // Evento para mousemove
-  function handleMove(e) {
-    if (!dragging || !currentNeedle) return;
-
-    let clientX, clientY;
-
-    if (e.type.startsWith('mouse')) {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    } else if (e.type.startsWith('touch')) {
-      const touch = e.touches[0];
-      clientX = touch.clientX;
-      clientY = touch.clientY;
-    }
-
-    const dx = clientX - currentCenterX;
-    const dy = clientY - currentCenterY;
-    let rad = Math.atan2(dy, dx);
-    let deg = rad * 180 / Math.PI;
-    let angle = deg + 90;
+  // Calculation functions
+  function angleToValue(angle, scale) {
     if (angle > 180) angle -= 360;
-    rotateNeedle(currentNeedle, angle);
-    let val = angleToValue(angle).toFixed(4);
-    if (currentNeedle === needleMin) {
-      inputMin.value = val;
-    } else {
-      inputMax.value = val;
-    }
+    let val = (angle / 180) * scale;
+    return val;
   }
 
-  // Eventos para mousemove y touchmove
-  document.addEventListener('mousemove', handleMove);
-  document.addEventListener('touchmove', handleMove, {passive: false});
-
-  // Eventos para mouseup y touchend
-  document.addEventListener('mouseup', () => {
-    dragging = false;
-    currentNeedle = null;
-  });
-  document.addEventListener('touchend', () => {
-    dragging = false;
-    currentNeedle = null;
-  });
-
-  inputMin.addEventListener('change', () => {
-    let val = parseFloat(inputMin.value);
-    if (isNaN(val)) return;
-    let angle = valueToAngle(val);
-    rotateNeedle(needleMin, angle);
-  });
-
-  inputMax.addEventListener('change', () => {
-    let val = parseFloat(inputMax.value);
-    if (isNaN(val)) return;
-    let angle = valueToAngle(val);
-    rotateNeedle(needleMax, angle);
-  });
-
-  function getData() {
-    return {
-      partName: inputPart.value,
-      minVal: inputMin.value,
-      maxVal: inputMax.value,
-      svgElement: svg
-    };
+  function valueToAngle(val, scale) {
+    if (val > scale) val = scale;
+    if (val < -scale) val = -scale;
+    let angle = (val / scale) * 180;
+    return angle;
   }
 
-  return {getData, medidorDiv};
-}
+  function rotateNeedle(needle, angle) {
+    needle.setAttribute('transform', `rotate(${angle} 100 100)`);
+  }
 
-// Evento para agregar medidor
-document.getElementById('add-medidor-btn').addEventListener('click', () => {
-  medidores.push(createMedidor());
-});
+  // Indicator Class
+  class Indicator {
+    constructor() {
+      this.units = 'in'; // 'in' or 'mm'
+      this.scale = 0.015; // value per tick
+      this.tickCount = 60; // number of scale divisions
 
-// Crear el primer medidor por defecto
-medidores.push(createMedidor());
+      this.minVal = 0.0000;
+      this.maxVal = 0.0000;
 
-async function svgToPngDataUrl(svgElement) {
-  return new Promise((resolve) => {
-    let serializer = new XMLSerializer();
-    let svgString = serializer.serializeToString(svgElement);
-    let img = new Image();
-    let svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
-    let url = URL.createObjectURL(svgBlob);
-    img.onload = function() {
-      let canvas = document.createElement('canvas');
-      // Mantener 200x200 para no perder calidad
-      canvas.width = 200; 
-      canvas.height = 200;
-      let ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      let png = canvas.toDataURL('image/png');
-      resolve(png);
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
-  });
-}
-
-document.getElementById('export-button').addEventListener('click', async () => {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Datos Runout');
-
-  // Columnas incluyendo Medidor
-  worksheet.columns = [
-    { header: 'Parte', key: 'parte', width: 25 },
-    { header: 'Mínimo', key: 'minimo', width: 10 },
-    { header: 'Máximo', key: 'maximo', width: 10 },
-    { header: 'Medidor', key: 'medidor', width: 50 } // más ancho
-  ];
-
-  for (let m of medidores) {
-    let data = m.getData();
-    let pngDataUrl = await svgToPngDataUrl(data.svgElement);
-
-    // Agregamos la fila de datos
-    worksheet.addRow({
-      parte: data.partName,
-      minimo: data.minVal,
-      maximo: data.maxVal,
-      medidor: ''
-    });
-
-    let lastRowNumber = worksheet.lastRow.number;
-    // Hacemos la fila muy alta para que la imagen quepa
-    worksheet.getRow(lastRowNumber).height = 150; 
-
-    // Centramos el texto
-    for (let j = 1; j <=4; j++) {
-      let cell = worksheet.getCell(lastRowNumber, j);
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      this.createIndicator();
     }
 
-    let base64 = pngDataUrl.split(',')[1];
-    const imageId = workbook.addImage({
-      base64: base64,
-      extension: 'png'
-    });
+    createIndicator() {
+      const container = document.getElementById('indicators-container');
 
-    // Colocamos la imagen en la celda D (col=3 0-based, row=lastRowNumber-1 0-based)
-    // Usamos ext: { width:200, height:200 } para mantener la calidad
-    worksheet.addImage(imageId, {
-      tl: { col: 3, row: lastRowNumber-1 },
-      ext: { width: 200, height: 200 }
-    });
-  }
+      this.indicatorDiv = document.createElement('div');
+      this.indicatorDiv.className = 'indicator';
 
-  // Bordes
-  for (let i = 1; i <= worksheet.lastRow.number; i++) {
-    for (let j = 1; j <= 4; j++) {
-      let cell = worksheet.getCell(i, j);
-      cell.border = {
-        top: {style:'thin'},
-        left: {style:'thin'},
-        bottom: {style:'thin'},
-        right: {style:'thin'}
+      const title = document.createElement('h2');
+      title.textContent = 'Indicator';
+      this.indicatorDiv.appendChild(title);
+
+      // Delete Button
+      this.deleteBtn = document.createElement('button');
+      this.deleteBtn.className = 'delete-btn';
+      this.deleteBtn.textContent = 'Delete';
+      this.deleteBtn.addEventListener('click', () => {
+        indicators = indicators.filter(ind => ind !== this);
+        this.indicatorDiv.remove();
+      });
+      this.indicatorDiv.appendChild(this.deleteBtn);
+
+      // Settings Button
+      this.settingsBtn = document.createElement('button');
+      this.settingsBtn.className = 'settings-btn';
+      this.settingsBtn.textContent = 'Settings';
+      this.settingsBtn.addEventListener('click', () => {
+        currentSettingsIndicator = this;
+        // Populate modal with current settings
+        unitsSelect.value = this.units;
+        scaleInput.value = this.scale;
+        tickCountInput.value = this.tickCount;
+        modal.style.display = "block";
+      });
+      this.indicatorDiv.appendChild(this.settingsBtn);
+
+      // Field Group 1: Part Name
+      const fieldGroup1 = document.createElement('div');
+      fieldGroup1.className = 'field-group';
+      const labelPart = document.createElement('label');
+      labelPart.textContent = 'Measured Part:';
+      this.inputPart = document.createElement('input');
+      this.inputPart.type = 'text';
+      this.inputPart.value = 'Unnamed';
+      labelPart.appendChild(this.inputPart);
+      fieldGroup1.appendChild(labelPart);
+      this.indicatorDiv.appendChild(fieldGroup1);
+
+      // Field Group 2: Min and Max
+      const fieldGroup2 = document.createElement('div');
+      fieldGroup2.className = 'field-group';
+
+      const labelMin = document.createElement('label');
+      labelMin.textContent = 'Minimum (Green):';
+      this.inputMin = document.createElement('input');
+      this.inputMin.type = 'number';
+      this.inputMin.step = '0.0001';
+      this.inputMin.value = '0.0000';
+      labelMin.appendChild(this.inputMin);
+      fieldGroup2.appendChild(labelMin);
+
+      const labelMax = document.createElement('label');
+      labelMax.textContent = 'Maximum (Red):';
+      this.inputMax = document.createElement('input');
+      this.inputMax.type = 'number';
+      this.inputMax.step = '0.0001';
+      this.inputMax.value = '0.0000';
+      labelMax.appendChild(this.inputMax);
+      fieldGroup2.appendChild(labelMax);
+
+      this.indicatorDiv.appendChild(fieldGroup2);
+
+      // Dial Container
+      const dialContainer = document.createElement('div');
+      dialContainer.className = 'dial-container';
+
+      const svgNS = "http://www.w3.org/2000/svg";
+      this.svg = document.createElementNS(svgNS, 'svg');
+      this.svg.setAttribute('viewBox', '0 0 200 200');
+      this.svg.setAttribute('class', 'dial-svg');
+
+      // Circle
+      const circle = document.createElementNS(svgNS, 'circle');
+      circle.setAttribute('cx', 100);
+      circle.setAttribute('cy', 100);
+      circle.setAttribute('r', 95);
+      circle.setAttribute('stroke', '#aaa');
+      circle.setAttribute('stroke-width', '4');
+      circle.setAttribute('fill', '#fff');
+      this.svg.appendChild(circle);
+
+      // Marks Group
+      this.marksGroup = document.createElementNS(svgNS, 'g');
+      this.marksGroup.setAttribute('id', 'marks');
+      this.svg.appendChild(this.marksGroup);
+
+      // Create Scale Marks
+      this.createScaleMarks();
+
+      // Needles
+      this.needleMin = document.createElementNS(svgNS, 'polygon');
+      this.needleMin.setAttribute('points', '100,20 97,100 103,100');
+      this.needleMin.setAttribute('fill', 'green');
+      this.svg.appendChild(this.needleMin);
+
+      this.needleMax = document.createElementNS(svgNS, 'polygon');
+      this.needleMax.setAttribute('points', '100,20 97,100 103,100');
+      this.needleMax.setAttribute('fill', 'red');
+      this.svg.appendChild(this.needleMax);
+
+      // Center Dot
+      const centerDot = document.createElementNS(svgNS, 'circle');
+      centerDot.setAttribute('cx', 100);
+      centerDot.setAttribute('cy', 100);
+      centerDot.setAttribute('r', 5);
+      centerDot.setAttribute('fill', '#444');
+      this.svg.appendChild(centerDot);
+
+      dialContainer.appendChild(this.svg);
+      this.indicatorDiv.appendChild(dialContainer);
+      container.appendChild(this.indicatorDiv);
+
+      // Initial Rotation
+      rotateNeedle(this.needleMin, 0);
+      rotateNeedle(this.needleMax, 0);
+      this.inputMin.value = angleToValue(0, this.scale).toFixed(4);
+      this.inputMax.value = angleToValue(0, this.scale).toFixed(4);
+
+      // Dragging Variables
+      this.dragging = false;
+      this.currentNeedle = null;
+      this.currentCenterX = 0;
+      this.currentCenterY = 0;
+
+      // Event Listeners
+      this.svg.addEventListener('mousedown', (e) => this.startDrag(e));
+      this.svg.addEventListener('touchstart', (e) => this.startDrag(e), {passive: false});
+      document.addEventListener('mousemove', (e) => this.drag(e));
+      document.addEventListener('touchmove', (e) => this.drag(e), {passive: false});
+      document.addEventListener('mouseup', () => this.endDrag());
+      document.addEventListener('touchend', () => this.endDrag());
+
+      // Input Change Events
+      this.inputMin.addEventListener('change', () => {
+        let val = parseFloat(this.inputMin.value);
+        if (isNaN(val)) return;
+        let angle = valueToAngle(val, this.scale);
+        rotateNeedle(this.needleMin, angle);
+      });
+
+      this.inputMax.addEventListener('change', () => {
+        let val = parseFloat(this.inputMax.value);
+        if (isNaN(val)) return;
+        let angle = valueToAngle(val, this.scale);
+        rotateNeedle(this.needleMax, angle);
+      });
+    }
+
+    createScaleMarks() {
+      // Clear existing marks
+      while (this.marksGroup.firstChild) {
+        this.marksGroup.removeChild(this.marksGroup.firstChild);
+      }
+
+      const totalLines = this.tickCount;
+      const lineSpacing = 360 / totalLines;
+      for (let i = 0; i < totalLines; i++) {
+        let angle = i * lineSpacing;
+        let length = (i % (totalLines / 10) === 0) ? 10 : 5; // Major ticks every 10 divisions
+        let rOuter = 95;
+        let rInner = 95 - length;
+        let rad = (angle - 90) * Math.PI / 180;
+        let xOuter = 100 + rOuter * Math.cos(rad);
+        let yOuter = 100 + rOuter * Math.sin(rad);
+        let xInner = 100 + rInner * Math.cos(rad);
+        let yInner = 100 + rInner * Math.sin(rad);
+
+        // Tick Line
+        const line = document.createElementNS("http://www.w3.org/2000/svg", 'line');
+        line.setAttribute('x1', xInner);
+        line.setAttribute('y1', yInner);
+        line.setAttribute('x2', xOuter);
+        line.setAttribute('y2', yOuter);
+        line.setAttribute('stroke', '#333');
+        line.setAttribute('stroke-width', '1');
+        this.marksGroup.appendChild(line);
+
+        // Tick Label for Major Ticks
+        if (length === 10) {
+          let displayValue = angleToValue(angle, this.scale);
+          let displayUnits = this.units === 'in' ? '"' : 'mm';
+          let labelX = 100 + (rInner - 15) * Math.cos(rad);
+          let labelY = 100 + (rInner - 15) * Math.sin(rad);
+          const text = document.createElementNS("http://www.w3.org/2000/svg", 'text');
+          text.setAttribute('x', labelX);
+          text.setAttribute('y', labelY);
+          text.setAttribute('font-size', '10');
+          text.setAttribute('fill', '#333');
+          text.setAttribute('text-anchor', 'middle');
+          text.textContent = displayValue.toFixed(4) + displayUnits;
+          this.marksGroup.appendChild(text);
+        }
+      }
+    }
+
+    updateSettings(units, scale, tickCount) {
+      this.units = units;
+      this.scale = scale;
+      this.tickCount = tickCount;
+
+      // Update Scale Marks
+      this.createScaleMarks();
+
+      // Update Existing Needle Values
+      rotateNeedle(this.needleMin, valueToAngle(parseFloat(this.inputMin.value), this.scale));
+      rotateNeedle(this.needleMax, valueToAngle(parseFloat(this.inputMax.value), this.scale));
+
+      // Update Labels
+      this.inputMin.value = angleToValue(valueToAngle(parseFloat(this.inputMin.value), this.scale), this.scale).toFixed(4);
+      this.inputMax.value = angleToValue(valueToAngle(parseFloat(this.inputMax.value), this.scale), this.scale).toFixed(4);
+    }
+
+    startDrag(e) {
+      e.preventDefault();
+      if (e.type === 'mousedown') {
+        if (e.target === this.needleMin || e.target === this.needleMax) {
+          this.dragging = true;
+          this.currentNeedle = e.target;
+          this.updateCenter();
+        }
+      } else if (e.type === 'touchstart') {
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (target === this.needleMin || target === this.needleMax) {
+          this.dragging = true;
+          this.currentNeedle = target;
+          this.updateCenter();
+        }
+      }
+    }
+
+    drag(e) {
+      if (!this.dragging || !this.currentNeedle) return;
+
+      let clientX, clientY;
+
+      if (e.type.startsWith('mouse')) {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      } else if (e.type.startsWith('touch')) {
+        const touch = e.touches[0];
+        clientX = touch.clientX;
+        clientY = touch.clientY;
+      }
+
+      const dx = clientX - this.currentCenterX;
+      const dy = clientY - this.currentCenterY;
+      let rad = Math.atan2(dy, dx);
+      let deg = rad * 180 / Math.PI;
+      let angle = deg + 90;
+      if (angle > 180) angle -= 360;
+      rotateNeedle(this.currentNeedle, angle);
+      let val = angleToValue(angle, this.scale).toFixed(4);
+      if (this.currentNeedle === this.needleMin) {
+        this.inputMin.value = val;
+      } else {
+        this.inputMax.value = val;
+      }
+    }
+
+    endDrag() {
+      this.dragging = false;
+      this.currentNeedle = null;
+    }
+
+    updateCenter() {
+      const rect = this.svg.getBoundingClientRect();
+      this.currentCenterX = rect.left + rect.width / 2;
+      this.currentCenterY = rect.top + rect.height / 2;
+    }
+
+    getData() {
+      // Convert min and max to both units
+      let minVal = parseFloat(this.inputMin.value);
+      let maxVal = parseFloat(this.inputMax.value);
+      let variation = maxVal - minVal;
+
+      let minIn, minMm, maxIn, maxMm, variationIn, variationMm;
+
+      if (this.units === 'in') {
+        minIn = minVal.toFixed(4);
+        minMm = (minVal * INCH_TO_MM).toFixed(4);
+        maxIn = maxVal.toFixed(4);
+        maxMm = (maxVal * INCH_TO_MM).toFixed(4);
+        variationIn = variation.toFixed(4);
+        variationMm = (variation * INCH_TO_MM).toFixed(4);
+      } else {
+        minMm = minVal.toFixed(4);
+        minIn = (minVal * MM_TO_INCH).toFixed(4);
+        maxMm = maxVal.toFixed(4);
+        maxIn = (maxVal * MM_TO_INCH).toFixed(4);
+        variationMm = variation.toFixed(4);
+        variationIn = (variation * MM_TO_INCH).toFixed(4);
+      }
+
+      return {
+        partName: this.inputPart.value,
+        minValIn: minIn,
+        minValMm: minMm,
+        maxValIn: maxIn,
+        maxValMm: maxMm,
+        variationIn: variationIn,
+        variationMm: variationMm,
+        svgElement: this.svg
       };
     }
   }
 
-  // Encabezados en negritas
-  worksheet.getRow(1).font = { bold: true };
+  // Function to create a new indicator
+  function createIndicator() {
+    const indicator = new Indicator();
+    indicators.push(indicator);
+  }
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
+  // Event listener to add a new indicator
+  document.getElementById('add-indicator-btn').addEventListener('click', () => {
+    createIndicator();
+  });
 
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'datos_runout.xlsx';
-  a.click();
+  // Create the first indicator by default
+  createIndicator();
 
-  URL.revokeObjectURL(url);
-});
+  // Function to convert SVG to PNG data URL
+  async function svgToPngDataUrl(svgElement) {
+    return new Promise((resolve) => {
+      let serializer = new XMLSerializer();
+      let svgString = serializer.serializeToString(svgElement);
+      let img = new Image();
+      let svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+      let url = URL.createObjectURL(svgBlob);
+      img.onload = function() {
+        let canvas = document.createElement('canvas');
+        // Maintain high quality
+        canvas.width = 200; 
+        canvas.height = 200;
+        let ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        let png = canvas.toDataURL('image/png');
+        resolve(png);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    });
+  }
+
+  // Event listener to export data to Excel
+  document.getElementById('export-button').addEventListener('click', async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Runout Data');
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'Part', key: 'part', width: 25 },
+      { header: 'Minimum (in)', key: 'minIn', width: 15 },
+      { header: 'Minimum (mm)', key: 'minMm', width: 15 },
+      { header: 'Maximum (in)', key: 'maxIn', width: 15 },
+      { header: 'Maximum (mm)', key: 'maxMm', width: 15 },
+      { header: 'Variation (± in)', key: 'varIn', width: 15 },
+      { header: 'Variation (± mm)', key: 'varMm', width: 15 },
+      { header: 'Indicator', key: 'indicator', width: 30 }
+    ];
+
+    // Add headers in bold
+    worksheet.getRow(1).font = { bold: true };
+
+    for (let ind of indicators) {
+      let data = ind.getData();
+      let pngDataUrl = await svgToPngDataUrl(data.svgElement);
+
+      worksheet.addRow({
+        part: data.partName,
+        minIn: data.minValIn,
+        minMm: data.minValMm,
+        maxIn: data.maxValIn,
+        maxMm: data.maxValMm,
+        varIn: `±${data.variationIn}`,
+        varMm: `±${data.variationMm}`,
+        indicator: ''
+      });
+
+      let lastRowNumber = worksheet.lastRow.number;
+      // Set row height to accommodate image
+      worksheet.getRow(lastRowNumber).height = 150; 
+
+      // Center alignment
+      for (let j = 1; j <= 8; j++) {
+        let cell = worksheet.getCell(lastRowNumber, j);
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      }
+
+      // Add image
+      let base64 = pngDataUrl.split(',')[1];
+      const imageId = workbook.addImage({
+        base64: base64,
+        extension: 'png'
+      });
+
+      // Insert image into the last row's 'Indicator' column (column 8, index 7)
+      worksheet.addImage(imageId, {
+        tl: { col: 7, row: lastRowNumber - 1 },
+        ext: { width: 200, height: 200 }
+      });
+    }
+
+    // Apply borders to all cells
+    for (let i = 1; i <= worksheet.lastRow.number; i++) {
+      for (let j = 1; j <= 8; j++) {
+        let cell = worksheet.getCell(i, j);
+        cell.border = {
+          top: {style:'thin'},
+          left: {style:'thin'},
+          bottom: {style:'thin'},
+          right: {style:'thin'}
+        };
+      }
+    }
+
+    // Generate Excel file and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'runout_data.xlsx';
+    a.click();
+
+    URL.revokeObjectURL(url);
+  });
 </script>
 </body>
 </html>
