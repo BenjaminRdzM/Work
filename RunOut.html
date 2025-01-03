@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Runout Indicator 360° with Advanced Settings</title>
+<title>Runout Indicator 360° con Configuraciones Avanzadas</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -185,12 +185,12 @@
       <label for="units-select">Units:</label>
       <select id="units-select">
         <option value="mm">Millimeters (mm)</option>
-        <option value="in">Inches (in)</option>
+        <option value="in" selected>Inches (in)</option>
       </select>
     </div>
     <div class="field-group">
       <label for="scale-input">Scale (value per tick):</label>
-      <input type="number" id="scale-input" step="0.0001" value="0.015">
+      <input type="number" id="scale-input" step="0.0001" value="0.005">
     </div>
     <div class="field-group">
       <label for="tick-count-input">Number of Scale Divisions:</label>
@@ -251,13 +251,27 @@ saveSettingsBtn.onclick = function() {
 // Calculation functions
 function angleToValue(angle, scale, tickCount) {
   let halfRange = (scale * tickCount) / 2;
-  let value = (angle / 180) * halfRange;
+  let value;
+
+  if (angle <= 180) {
+    value = (angle / 180) * halfRange;
+  } else {
+    value = ((angle - 360) / 180) * halfRange;
+  }
+
   return value;
 }
 
 function valueToAngle(val, scale, tickCount) {
   let halfRange = (scale * tickCount) / 2;
-  let angle = (val / halfRange) * 180;
+  let angle;
+
+  if (val >= 0) {
+    angle = (val / halfRange) * 180;
+  } else {
+    angle = (val / halfRange) * 180 + 360;
+  }
+
   return angle;
 }
 
@@ -265,11 +279,20 @@ function rotateNeedle(needle, angle) {
   needle.setAttribute('transform', `rotate(${angle} 100 100)`);
 }
 
+// Determine decimal places based on scale
+function getDecimalPlaces(scale) {
+  const scaleStr = scale.toString();
+  if (scaleStr.includes('.')) {
+    return scaleStr.split('.')[1].length;
+  }
+  return 0;
+}
+
 // Indicator Class
 class Indicator {
   constructor(isDefault = false) {
     this.units = 'in'; // 'in' or 'mm'
-    this.scale = 0.015; // value per tick
+    this.scale = 0.005; // value per tick
     this.tickCount = 60; // number of scale divisions
 
     this.minVal = 0.0000;
@@ -300,21 +323,19 @@ class Indicator {
     });
     this.indicatorDiv.appendChild(this.deleteBtn);
 
-    // Settings Button (only for non-default indicators)
-    if (!this.isDefault) {
-      this.settingsBtn = document.createElement('button');
-      this.settingsBtn.className = 'settings-btn';
-      this.settingsBtn.textContent = 'Settings';
-      this.settingsBtn.addEventListener('click', () => {
-        currentSettingsIndicator = this;
-        // Populate modal with current settings
-        unitsSelect.value = this.units;
-        scaleInput.value = this.scale;
-        tickCountInput.value = this.tickCount;
-        modal.style.display = "block";
-      });
-      this.indicatorDiv.appendChild(this.settingsBtn);
-    }
+    // Settings Button
+    this.settingsBtn = document.createElement('button');
+    this.settingsBtn.className = 'settings-btn';
+    this.settingsBtn.textContent = 'Settings';
+    this.settingsBtn.addEventListener('click', () => {
+      currentSettingsIndicator = this;
+      // Populate modal with current settings
+      unitsSelect.value = this.units;
+      scaleInput.value = this.scale;
+      tickCountInput.value = this.tickCount;
+      modal.style.display = "block";
+    });
+    this.indicatorDiv.appendChild(this.settingsBtn);
 
     // Field Group 1: Part Name
     const fieldGroup1 = document.createElement('div');
@@ -403,10 +424,10 @@ class Indicator {
     container.appendChild(this.indicatorDiv);
 
     // Initial Rotation
-    rotateNeedle(this.needleMin, 0);
-    rotateNeedle(this.needleMax, 0);
-    this.inputMin.value = angleToValue(0, this.scale, this.tickCount).toFixed(4);
-    this.inputMax.value = angleToValue(0, this.scale, this.tickCount).toFixed(4);
+    rotateNeedle(this.needleMin, valueToAngle(0, this.scale, this.tickCount));
+    rotateNeedle(this.needleMax, valueToAngle(0, this.scale, this.tickCount));
+    this.inputMin.value = angleToValue(valueToAngle(0, this.scale, this.tickCount), this.scale, this.tickCount).toFixed(4);
+    this.inputMax.value = angleToValue(valueToAngle(0, this.scale, this.tickCount), this.scale, this.tickCount).toFixed(4);
 
     // Dragging Variables
     this.dragging = false;
@@ -446,10 +467,12 @@ class Indicator {
 
     const totalLines = this.tickCount;
     const lineSpacing = 360 / totalLines;
-    for (let i = 0; i < totalLines; i++) {
+    const decimalPlaces = getDecimalPlaces(this.scale);
+
+    for (let i = 0; i <= totalLines; i++) { // Incluye el último tick
       let angle = i * lineSpacing;
-      let majorTickInterval = Math.floor(totalLines / 10); // Major ticks every 10%
-      let length = (i % majorTickInterval === 0) ? 10 : 5; // Major ticks
+      let majorTickInterval = Math.floor(totalLines / 10); // Tick principales cada 10%
+      let length = (i % majorTickInterval === 0) ? 10 : 5; // Tick principales
       let rOuter = 95;
       let rInner = 95 - length;
       let rad = (angle - 90) * Math.PI / 180;
@@ -458,7 +481,7 @@ class Indicator {
       let xInner = 100 + rInner * Math.cos(rad);
       let yInner = 100 + rInner * Math.sin(rad);
 
-      // Tick Line
+      // Línea de Tick
       const line = document.createElementNS("http://www.w3.org/2000/svg", 'line');
       line.setAttribute('x1', xInner);
       line.setAttribute('y1', yInner);
@@ -468,19 +491,23 @@ class Indicator {
       line.setAttribute('stroke-width', '1');
       this.marksGroup.appendChild(line);
 
-      // Tick Label for Major Ticks
+      // Etiqueta de Tick Principal
       if (length === 10) {
         let displayValue = angleToValue(angle, this.scale, this.tickCount);
         let displayUnits = this.units === 'in' ? '"' : 'mm';
         let labelX = 100 + (rInner - 15) * Math.cos(rad);
-        let labelY = 100 + (rInner - 15) * Math.sin(rad);
+        let labelY = 100 + (rInner - 15) * Math.sin(rad) + 4; // Ajuste de posición vertical
+
         const text = document.createElementNS("http://www.w3.org/2000/svg", 'text');
         text.setAttribute('x', labelX);
         text.setAttribute('y', labelY);
         text.setAttribute('font-size', '10');
         text.setAttribute('fill', '#333');
         text.setAttribute('text-anchor', 'middle');
-        text.textContent = displayValue.toFixed(2) + displayUnits;
+
+        // Mostrar signo negativo si es necesario
+        text.textContent = displayValue.toFixed(decimalPlaces) + displayUnits;
+
         this.marksGroup.appendChild(text);
       }
     }
@@ -543,7 +570,9 @@ class Indicator {
     let rad = Math.atan2(dy, dx);
     let deg = rad * 180 / Math.PI;
     let angle = deg + 90;
-    if (angle > 180) angle -= 360;
+    if (angle < 0) angle += 360;
+    if (angle >= 360) angle -= 360;
+
     rotateNeedle(this.currentNeedle, angle);
     let val = angleToValue(angle, this.scale, this.tickCount).toFixed(4);
     if (this.currentNeedle === this.needleMin) {
@@ -565,7 +594,7 @@ class Indicator {
   }
 
   getData() {
-    // Convert min and max to both units
+    // Convert min y max a ambas unidades
     let minVal = parseFloat(this.inputMin.value);
     let maxVal = parseFloat(this.inputMax.value);
     let variation = maxVal - minVal;
@@ -612,8 +641,18 @@ document.getElementById('add-indicator-btn').addEventListener('click', () => {
   createIndicator();
 });
 
-// Create the first (default) indicator by default
-createIndicator(true);
+// Create the first (default) indicator with specified settings
+function createDefaultIndicator() {
+  const defaultIndicator = new Indicator(true);
+  defaultIndicator.units = 'in'; // Mantener en pulgadas
+  defaultIndicator.scale = 0.0005; // Cambiar escala a 0.005
+  defaultIndicator.tickCount = 60; // Mantener 60 rayitas
+  defaultIndicator.updateSettings(defaultIndicator.units, defaultIndicator.scale, defaultIndicator.tickCount);
+  indicators.push(defaultIndicator);
+}
+
+// Initialize the default indicator
+createDefaultIndicator();
 
 // Function to convert SVG to PNG data URL
 async function svgToPngDataUrl(svgElement) {
@@ -625,11 +664,12 @@ async function svgToPngDataUrl(svgElement) {
     let url = URL.createObjectURL(svgBlob);
     img.onload = function() {
       let canvas = document.createElement('canvas');
-      // Maintain high quality
-      canvas.width = 200; 
-      canvas.height = 200;
+      // Aumentar el tamaño del canvas para mayor resolución
+      canvas.width = 600; 
+      canvas.height = 600;
       let ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
+      // Dibujar la imagen escalada al tamaño del canvas
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       let png = canvas.toDataURL('image/png');
       resolve(png);
       URL.revokeObjectURL(url);
@@ -643,62 +683,62 @@ document.getElementById('export-button').addEventListener('click', async () => {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Runout Data');
 
-  // Define columns
+  // Definir columnas agrupadas por unidades
   worksheet.columns = [
     { header: 'Part', key: 'part', width: 25 },
-    { header: 'Minimum (in)', key: 'minIn', width: 15 },
-    { header: 'Minimum (mm)', key: 'minMm', width: 15 },
-    { header: 'Maximum (in)', key: 'maxIn', width: 15 },
-    { header: 'Maximum (mm)', key: 'maxMm', width: 15 },
-    { header: 'Variation (± in)', key: 'varIn', width: 15 },
-    { header: 'Variation (± mm)', key: 'varMm', width: 15 },
+    { header: 'Min (mm)', key: 'minMm', width: 15 },
+    { header: 'Max (mm)', key: 'maxMm', width: 15 },
+    { header: 'Var (mm)', key: 'varMm', width: 15 },
+    { header: 'Min (in)', key: 'minIn', width: 15 },
+    { header: 'Max (in)', key: 'maxIn', width: 15 },
+    { header: 'Var (in)', key: 'varIn', width: 15 },
     { header: 'Indicator', key: 'indicator', width: 30 }
   ];
 
-  // Add headers in bold
+  // Agregar encabezados en negrita
   worksheet.getRow(1).font = { bold: true };
 
   for (let ind of indicators) {
     let data = ind.getData();
     let pngDataUrl = await svgToPngDataUrl(data.svgElement);
 
-    // Add row data
+    // Agregar datos en el nuevo orden
     worksheet.addRow({
       part: data.partName,
-      minIn: data.minValIn,
       minMm: data.minValMm,
-      maxIn: data.maxValIn,
       maxMm: data.maxValMm,
-      varIn: data.variationIn,
       varMm: data.variationMm,
+      minIn: data.minValIn,
+      maxIn: data.maxValIn,
+      varIn: data.variationIn,
       indicator: ''
     });
 
     let lastRowNumber = worksheet.lastRow.number;
-    // Set row height to accommodate image
-    worksheet.getRow(lastRowNumber).height = 150; 
+    // Establecer la altura de la fila para acomodar la imagen
+    worksheet.getRow(lastRowNumber).height = 100; // Ajustar según el tamaño de la imagen
 
-    // Center alignment
+    // Alineación centrada
     for (let j = 1; j <= 8; j++) {
       let cell = worksheet.getCell(lastRowNumber, j);
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
     }
 
-    // Add image
+    // Agregar imagen
     let base64 = pngDataUrl.split(',')[1];
     const imageId = workbook.addImage({
       base64: base64,
       extension: 'png'
     });
 
-    // Insert image into the last row's 'Indicator' column (column 8, index 7)
+    // Insertar imagen en la columna 'Indicator' de la última fila
     worksheet.addImage(imageId, {
-      tl: { col: 7, row: lastRowNumber - 1 },
-      ext: { width: 200, height: 200 }
+      tl: { col: 7, row: lastRowNumber - 1 }, // Columna 8 es 'Indicator', índice 7
+      ext: { width: 100, height: 100 } // Ajustar tamaño de la imagen para que encaje en la celda
     });
   }
 
-  // Apply borders to all cells
+  // Aplicar bordes a todas las celdas
   for (let i = 1; i <= worksheet.lastRow.number; i++) {
     for (let j = 1; j <= 8; j++) {
       let cell = worksheet.getCell(i, j);
@@ -711,7 +751,12 @@ document.getElementById('export-button').addEventListener('click', async () => {
     }
   }
 
-  // Generate Excel file and download
+  // Ajustar ancho de las columnas para que las imágenes no se desborden
+  worksheet.columns.forEach(column => {
+    column.width = column.width < 20 ? 20 : column.width;
+  });
+
+  // Generar archivo Excel y descargar
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
