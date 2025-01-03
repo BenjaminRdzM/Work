@@ -190,7 +190,7 @@
     </div>
     <div class="field-group">
       <label for="scale-input">Scale (value per tick):</label>
-      <input type="number" id="scale-input" step="0.0001" value="0.005">
+      <input type="number" id="scale-input" step="0.0001" value="0.0005">
     </div>
     <div class="field-group">
       <label for="tick-count-input">Number of Scale Divisions:</label>
@@ -292,7 +292,7 @@ function getDecimalPlaces(scale) {
 class Indicator {
   constructor(isDefault = false) {
     this.units = 'in'; // 'in' or 'mm'
-    this.scale = 0.005; // value per tick
+    this.scale = 0.0005; // value per tick
     this.tickCount = 60; // number of scale divisions
 
     this.minVal = 0.0000;
@@ -645,7 +645,7 @@ document.getElementById('add-indicator-btn').addEventListener('click', () => {
 function createDefaultIndicator() {
   const defaultIndicator = new Indicator(true);
   defaultIndicator.units = 'in'; // Mantener en pulgadas
-  defaultIndicator.scale = 0.0005; // Cambiar escala a 0.005
+  defaultIndicator.scale = 0.0005; // Cambiar escala a 0.0005
   defaultIndicator.tickCount = 60; // Mantener 60 rayitas
   defaultIndicator.updateSettings(defaultIndicator.units, defaultIndicator.scale, defaultIndicator.tickCount);
   indicators.push(defaultIndicator);
